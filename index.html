@@ -26,10 +26,12 @@
     background:rgba(255,255,255,.32);border:2px solid rgba(255,255,255,.6);pointer-events:none;transition:transform .06s}
   #jump{width:84px;height:84px;background:rgba(250,200,60,.28);border-color:rgba(250,200,60,.6);font-size:20px;font-weight:700}
   #stick.on #knob{background:rgba(250,200,60,.45);border-color:rgba(250,200,60,.85);transition:none}
-  #infoBtn{position:fixed;top:max(10px, env(safe-area-inset-top));right:12px;z-index:5;padding:7px 12px;border-radius:18px;
+  #infoBtn,#musBtn{position:fixed;top:max(10px, env(safe-area-inset-top));right:12px;z-index:5;padding:7px 12px;border-radius:18px;
     background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.35);color:#fff;font-size:14px;font-weight:600;cursor:pointer}
-  body:not(.touch) #infoBtn{position:static;margin-top:10px}
-  body.touch #infoBtn{width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;font-size:20px;border-radius:50%}
+  body:not(.touch) #infoBtn,body:not(.touch) #musBtn{position:static}
+  #btnRow{display:flex;gap:8px;margin-top:10px}
+  body.touch #musBtn{right:62px}
+  body.touch #infoBtn,body.touch #musBtn{width:40px;height:40px;padding:0;display:flex;align-items:center;justify-content:center;font-size:20px;border-radius:50%}
   #info{position:fixed;inset:0;z-index:10;background:rgba(18,14,28,.78);display:none;align-items:center;justify-content:center;padding:16px}
   #info.show{display:flex}
   #info .card{background:#2a2438;border:2px solid #4a4060;border-radius:14px;padding:14px 12px;color:#eee;max-width:480px;width:100%;
@@ -63,9 +65,9 @@
 </head>
 <body>
 <div id="wrap"><canvas id="c" width="320" height="176"></canvas>
-<div id="hint">← → 이동 · Space / ↑ 점프 · ↓+점프 발판 내려가기 · X / J 공격 · I 상성표 · R 새 맵</div></div>
+<div id="hint">← → 이동 · Space / ↑ 점프 · ↓+점프 발판 내려가기 · X / J 공격 · I 상성표 · M 음악 · R 새 맵</div></div>
 <div id="lobby"><div class="card" id="lobbyCard"></div></div>
-<div id="infoBtn">📖 상성표</div>
+<div id="infoBtn">📖 상성표</div><div id="musBtn">🔊 음악</div>
 <div id="info"><div class="card"><h3>무기 상성표</h3><table id="effTable"></table>
 <p>▲ 효과 굉장 · 피해 2배 &nbsp; ▼ 효과 별로 · 피해 절반 &nbsp; ✕ 튕겨냄 · 피해 없음<br>게임 중에는 들고 있는 무기 기준으로 몬스터 머리 위에 ▲ ▼ ✕ 가 표시돼요.</p>
 <button id="closeInfo">닫고 계속하기</button></div></div>
@@ -94,7 +96,7 @@ const OL='#22182f';
 // ---------- layout ----------
 const isTouch=('ontouchstart' in window)||matchMedia('(pointer:coarse)').matches;
 if(isTouch){document.body.classList.add('touch');document.getElementById('pad').style.display='flex';}
-if(isTouch)document.getElementById('infoBtn').textContent='📖';else document.getElementById('wrap').appendChild(document.getElementById('infoBtn'));
+if(isTouch)document.getElementById('infoBtn').textContent='📖';else{const row=document.createElement('div');row.id='btnRow';row.appendChild(document.getElementById('musBtn'));row.appendChild(document.getElementById('infoBtn'));document.getElementById('wrap').appendChild(row);}
 function fit(){
   const w=innerWidth,h=innerHeight,portrait=h>w;
   const availH=isTouch&&portrait?h-150:h-(isTouch?0:80);
@@ -136,12 +138,87 @@ cv.addEventListener('pointerdown',()=>{if(state!=='play')jumpPressed=true;anyInp
 // ---------- audio ----------
 let ac=null;
 function anyInput(){if(!ac){try{ac=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}
-  if(ac&&ac.state==='suspended')ac.resume().catch(()=>{});}
+  if(ac&&ac.state==='suspended')ac.resume().catch(()=>{});if(ac&&typeof MUS!=='undefined')MUS.start();}
 function beep(f1,f2,dur,type='square',vol=.08){if(!ac)return;try{
   const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime;o.type=type;
   o.frequency.setValueAtTime(f1,t);o.frequency.exponentialRampToValueAtTime(f2,t+dur);
   g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);
   o.connect(g).connect(ac.destination);o.start(t);o.stop(t+dur);}catch(e){}}
+// ---------- retro background music (chiptune sequencer) ----------
+const MUS=(()=>{
+  const nf=n=>{const m=n.match(/^([A-G])(#|b)?(\d)$/),b={C:0,D:2,E:4,F:5,G:7,A:9,B:11}[m[1]]+(m[2]==='#'?1:m[2]==='b'?-1:0);return 440*Math.pow(2,(b+12*(+m[3]+1)-69)/12);};
+  const T={
+    main:{bpm:120,lw:'square',lv:.03,att:.006,bassHalf:false,arp:2,arpV:.009,kick:8,kv:.2,snare:[4,12],sv:.05,hat:[0,2,4,6,8,10,12,14],hv:.013,
+      bass:['C3','G2','A2','F2','C3','G2','F2','G2'],
+      chords:[['C4','E4','G4'],['G3','B3','D4'],['A3','C4','E4'],['F3','A3','C4'],['C4','E4','G4'],['G3','B3','D4'],['F3','A3','C4'],['G3','B3','D4']],
+      lead:[[[0,'C5',2],[2,'E5',2],[4,'G5',3],[7,'E5',1],[8,'G5',2],[10,'A5',2],[12,'G5',4]],
+            [[0,'D5',2],[2,'G5',2],[4,'B5',3],[7,'A5',1],[8,'G5',2],[10,'D5',2],[12,'B4',4]],
+            [[0,'C5',2],[2,'E5',2],[4,'A5',3],[7,'G5',1],[8,'E5',2],[10,'C5',2],[12,'E5',4]],
+            [[0,'F5',2],[2,'E5',2],[4,'D5',2],[6,'C5',2],[8,'A4',4],[12,'C5',2],[14,'D5',2]],
+            [[0,'E5',3],[3,'E5',1],[4,'G5',2],[6,'C6',2],[8,'B5',2],[10,'A5',2],[12,'G5',4]],
+            [[0,'D5',3],[3,'D5',1],[4,'G5',2],[6,'B5',2],[8,'A5',2],[10,'G5',2],[12,'D5',4]],
+            [[0,'F5',2],[2,'A5',2],[4,'C6',3],[7,'A5',1],[8,'G5',2],[10,'F5',2],[12,'E5',2],[14,'D5',2]],
+            [[0,'D5',2],[2,'B4',2],[4,'D5',2],[6,'G5',2],[8,'G5',4],[12,'F5',2],[14,'D5',2]]]},
+    adv:{bpm:136,lw:'square',lv:.042,att:.005,bassHalf:false,arp:1,arpV:.011,kick:8,kv:.3,snare:[4,12],sv:.12,hat:[0,2,4,6,8,10,12,14],hv:.035,
+      bass:['A2','F2','C3','G2','A2','F2','G2','E2'],
+      chords:[['A4','C5','E5'],['F4','A4','C5'],['C4','E4','G4'],['G4','B4','D5'],['A4','C5','E5'],['F4','A4','C5'],['G4','B4','D5'],['E4','G#4','B4']],
+      lead:[[[0,'A4',2],[2,'C5',2],[4,'E5',2],[6,'A5',4],[10,'G5',2],[12,'E5',4]],
+            [[0,'F5',2],[2,'E5',2],[4,'C5',2],[6,'A4',4],[10,'C5',2],[12,'D5',4]],
+            [[0,'E5',2],[2,'G5',2],[4,'C6',4],[8,'B5',2],[10,'G5',2],[12,'E5',4]],
+            [[0,'D5',2],[2,'B4',2],[4,'G4',2],[6,'B4',2],[8,'D5',4],[12,'E5',2]],
+            [[0,'A5',4],[4,'G5',2],[6,'E5',2],[8,'D5',2],[10,'E5',2],[12,'C5',4]],
+            [[0,'A4',2],[2,'C5',2],[4,'F5',4],[8,'E5',2],[10,'D5',2],[12,'C5',4]],
+            [[0,'B4',2],[2,'D5',2],[4,'G5',4],[8,'F5',2],[10,'D5',2],[12,'B4',4]],
+            [[0,'G#4',2],[2,'B4',2],[4,'E5',4],[8,'D5',2],[10,'B4',2],[12,'G#4',2],[14,'E4',2]]]},
+    boss:{bpm:140,lw:'square',lv:.034,att:.008,bassHalf:false,arp:2,arpV:.009,kick:8,kv:.24,snare:[4,12],sv:.07,hat:[0,4,8,12],hv:.022,
+      bass:['D2','D2','Bb1','A1'],
+      chords:[['D4','F4','A4'],['D4','F4','A4'],['Bb3','D4','F4'],['A3','C#4','E4']],
+      lead:[[[0,'D5',2],[2,'F5',2],[4,'A5',2],[6,'G#5',2],[8,'A5',4],[12,'F5',2],[14,'D5',2]],
+            [[0,'C5',2],[2,'D5',2],[4,'F5',2],[6,'E5',2],[8,'D5',4],[12,'A4',4]],
+            [[0,'Bb4',2],[2,'D5',2],[4,'F5',2],[6,'Bb5',4],[10,'A5',2],[12,'F5',4]],
+            [[0,'A4',2],[2,'C#5',2],[4,'E5',2],[6,'A5',4],[10,'G5',2],[12,'E5',2],[14,'C#5',2]]]}};
+  let on=true;try{on=localStorage.getItem('hoodMus')!=='0';}catch(e){}
+  let g=null,nz=null,nt=0,step=0,cur='main',want='main';
+  const tone=(type,f,t,d,v,att=.005)=>{const o=ac.createOscillator(),e=ac.createGain();o.type=type;o.frequency.setValueAtTime(f,t);
+    e.gain.setValueAtTime(0,t);e.gain.linearRampToValueAtTime(v,t+Math.min(att,d*.3));e.gain.setValueAtTime(v,t+d*.75);e.gain.linearRampToValueAtTime(0,t+d);
+    o.connect(e).connect(g);o.start(t);o.stop(t+d+.02);};
+  const noise=(t,d,v,hp)=>{const s=ac.createBufferSource(),f=ac.createBiquadFilter(),e=ac.createGain();s.buffer=nz;f.type='highpass';f.frequency.value=hp;
+    e.gain.setValueAtTime(v,t);e.gain.exponentialRampToValueAtTime(.001,t+d);s.connect(f).connect(e).connect(g);s.start(t);s.stop(t+d+.01);};
+  const kick=(t,kv)=>{const o=ac.createOscillator(),e=ac.createGain();o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(40,t+.12);
+    e.gain.setValueAtTime(kv,t);e.gain.exponentialRampToValueAtTime(.001,t+.15);o.connect(e).connect(g);o.start(t);o.stop(t+.16);};
+  function sched(){if(!ac||!g||ac.state!=='running')return;
+    if(nt<ac.currentTime)nt=ac.currentTime+.05;
+    while(nt<ac.currentTime+.15){
+      const tr=T[cur],sd=60/tr.bpm/4,s=step%(tr.bass.length*16),bar=Math.floor(s/16),b=s%16;
+      if(on){try{
+        for(const ev of tr.lead[bar])if(ev[0]===b)tone(tr.lw,nf(ev[1]),nt,ev[2]*sd*.95,tr.lv,tr.att);
+        const r=nf(tr.bass[bar]);
+        if(tr.bassHalf){if(b%8===0)tone('triangle',r,nt,sd*7.5,.16,.02);}
+        else if(b%2===0)tone('triangle',b%4===0?r:r*2,nt,sd*1.7,.16);
+        if(b%tr.arp===0){const c=tr.chords[bar],k=(b/tr.arp)%4;tone('square',nf(c[k===3?1:k])*(tr.arp===1?2:1),nt,sd*tr.arp*.8,tr.arpV,.01);}
+        if(b%tr.kick===0)kick(nt,tr.kv);
+        if(tr.snare.includes(b))noise(nt,.1,tr.sv,1400);
+        if(tr.hat.includes(b))noise(nt,.03,tr.hv,7000);
+      }catch(e){}}
+      step++;nt+=sd;
+      if(step%16===0){const fld=cur==='main'||cur==='adv';let tgt=want==='main'?(fld?cur:'main'):want;
+        if(want==='main'&&fld&&step>=tr.bass.length*16*2)tgt=cur==='main'?'adv':'main';
+        if(tgt!==cur){cur=tgt;step=0;}}}}
+  return {
+    start(){if(!ac||g)return;try{g=ac.createGain();g.gain.value=.9;g.connect(ac.destination);
+      nz=ac.createBuffer(1,ac.sampleRate*.5,ac.sampleRate);const d=nz.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+      nt=ac.currentTime+.1;setInterval(sched,25);}catch(e){}},
+    set(w){want=w;},
+    toggle(){on=!on;try{localStorage.setItem('hoodMus',on?'1':'0');}catch(e){}return on;},
+    get on(){return on;},get track(){return cur;}};
+})();
+function musWant(){const ws=Array.isArray(ents)&&ents.some(e=>e.boss&&!e.dead&&!e.gone);
+  return ws||(typeof gmode!=='undefined'&&gmode==='surv'&&state==='play')?'boss':'main';}
+{const mb=document.getElementById('musBtn');
+  const upd=()=>{mb.textContent=isTouch?(MUS.on?'🔊':'🔇'):(MUS.on?'🔊 음악 켜짐':'🔇 음악 꺼짐');};upd();
+  mb.addEventListener('pointerdown',e=>e.stopPropagation());
+  mb.addEventListener('click',e=>{e.stopPropagation();anyInput();MUS.toggle();upd();});
+  addEventListener('keydown',e=>{if(e.target&&e.target.tagName==='INPUT')return;if(e.code==='KeyM'){anyInput();MUS.toggle();upd();}});}
 const SFX={jump:()=>beep(300,600,.12),coin:()=>{beep(990,990,.06);setTimeout(()=>beep(1320,1320,.12),60)},
   kill:()=>beep(400,80,.15,'square',.1),hurt:()=>beep(200,60,.3,'sawtooth',.09),
   key:()=>{[660,880,1100].forEach((f,i)=>setTimeout(()=>beep(f,f,.1),i*80))},
@@ -1019,7 +1096,7 @@ function overlay(a,b,c){ctx.fillStyle='rgba(28,24,38,.55)';ctx.fillRect(0,0,VW,V
   if(ctx.measureText&&b.length>26){const i=b.indexOf(',');txt(b.slice(0,i+1),VW/2,oy+24,'#fff',10);txt(b.slice(i+2),VW/2,oy+38,'#fff',10);}else txt(b,VW/2,oy+28,'#fff',10);if(Math.floor(timer*2)%2===0)txt(c,VW/2,oy+58,'#cfe8ff',9);}
 
 let last=0,netAcc=0;
-function loop(t){const dt=Math.min(.033,(t-last)/1000||0);last=t;
+function loop(t){const dt=Math.min(.033,(t-last)/1000||0);last=t;MUS.set(musWant());
   if(shake>0)shake-=dt;
   if(NET.mode==='guest'){guestTick(dt);}
   else{
