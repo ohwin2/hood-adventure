@@ -341,8 +341,7 @@ function reset(full=true){
   if(gmode==='surv'){winner=null;survT=0;const pts=[];const cand=shuffle(R.filter(([x,y])=>isStand(g,x,y)&&g[y][x]==='.'&&g[y-1]&&g[y-1][x]==='.'));
     for(const pl of players){let best=cand[0],bd=-1;for(let i=0;i<Math.min(cand.length,250);i++){const c=cand[i];
         const d=pts.length?Math.min(...pts.map(p=>Math.abs(p[0]-c[0])+Math.abs(p[1]-c[1])*1.5)):Math.random();if(d>bd){bd=d;best=c;}}
-      pts.push(best);pl.x=best[0]*T+2;pl.y=(best[1]+1)*T-19;pl.inv=3;pl.kills=0;
-      const pool=Object.keys(WEAPONS);pl.weapon=pool[rnd(0,pool.length-1)];pl.lv=1;}
+      pts.push(best);pl.x=best[0]*T+2;pl.y=(best[1]+1)*T-19;pl.inv=3;pl.kills=0;pl.weapon=null;pl.lv=0;}
     for(const e of ents)if(e.enemy&&players.some(pl=>Math.abs(pl.x-e.x)<5*T&&Math.abs(pl.y-e.y)<3*T))e.gone=true;
     ents=ents.filter(e=>!e.gone);updAtkBtn();}
   camX=Math.max(0,P.x-100);camY=LH*T-VH;state=full&&NET.mode==='solo'?'title':'play';banner=full&&NET.mode==='solo'?0:2.8;gridFull=true;
