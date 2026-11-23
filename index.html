@@ -366,7 +366,7 @@ const THEMES={
   factory:{name:'고철 공장',sky:['#5e566e','#c89a78'],cloud:'#a89ab0',h1:'#5a5266',h2:'#433c4e',
     plat:[['belt',.45],['B',.25],['S',.1],['-',.2]],ground:'belt',runs:4},
   swamp:{name:'안개 늪',tip:'🟫 진흙에서는 느려지고 점프가 낮아져요',sky:['#56705e','#a9b892'],cloud:'#c8d4c0',h1:'#4e6a4a',h2:'#3c5438',
-    plat:[['M',.35],['X',.25],['-',.4]],ground:'M',runs:5},
+    plat:[['M',.25],['X',.3],['-',.45]],ground:'M',runs:5},
   poison:{name:'독안개 동굴',tip:'☠ 독 웅덩이 위에 오래 있으면 데미지!',sky:['#2e2040','#7a5a98'],cloud:'#a48ac0',h1:'#4a3460',h2:'#34244a',
     plat:[['P',.3],['S',.2],['B',.25],['-',.25]],ground:'P',runs:4},
   lava:{name:'용암 화산',tip:'🔥 용암에 닿으면 데미지 + 튕겨나가요!',sky:['#2e1010','#c24a26'],cloud:'#6a4a4a',h1:'#4a2020',h2:'#2c1414',
@@ -412,7 +412,8 @@ function reachable(g,sx,sy){
     for(const d of [-1,1]){const nx=x+d;
       if(isStand(g,nx,y))add(nx,y);
       else if(!gSolid(g,nx,y)&&!gSolid(g,nx,y-1)){let yy=y+1;while(yy<LH-1&&!isStand(g,nx,yy)&&!gSolid(g,nx,yy))yy++;add(nx,yy);}}
-    for(let dy=1;dy<=3;dy++){
+    const maxDy=g[y+1]&&g[y+1][x]==='M'?2:3;
+    for(let dy=1;dy<=maxDy;dy++){
       let clear=true;for(let k=1;k<=dy+1;k++)if(gSolid(g,x,y-k)){clear=false;break;}
       if(!clear)break;
       const m=dy===3?2:3;
@@ -455,7 +456,12 @@ function reset(full=true){
   if(full)stage=1;
   let g,R,sx=3,sy=LH-3;
   pickTheme(full);
-  for(let tries=0;tries<20;tries++){g=genMap();R=reachable(g,sx,sy);if(R.length>LW*LH*.18)break;}
+  {let best=null;
+  for(let tries=0;tries<80;tries++){const gg=genMap(),rr=reachable(gg,sx,sy);let tot=0;
+    for(let y=1;y<LH-1;y++)for(let x=1;x<LW-1;x++)if(isStand(gg,x,y))tot++;
+    const top=rr.some(([x,y])=>y<=7),sc=rr.length/Math.max(1,tot),v=(top?1:0)+sc;
+    if(!best||v>best.v)best={g:gg,r:rr,v};if(top&&sc>=.97)break;}
+  g=best.g;R=best.r;}
   grid=g;reachList=R;ents=[];parts=[];arrows=[];fireballs=[];popups=[];waves=[];seeds=[];blocks=[];booms=[];bombs=[];bones=[];rings=[];
   totalCoins=0;hasKey=false;shake=0;blockTimer=4;doorMsgT=0;
   if(full){coins=0;timer=0;playTime=0;}
@@ -777,7 +783,7 @@ function updPlayer(pl,dt){
   if(P.jbuf>0&&P.coyote>0){
     const fx=Math.floor((P.x+P.w/2)/T),fy=Math.floor((P.y+P.h+1)/T);
     if(K.d&&oneWayAt(fx,fy)){P.drop=.25;P.jbuf=0;P.coyote=0;P.vy=40;}
-    else{P.vy=JUMPV*(mud?.8:1);P.jbuf=0;P.coyote=0;if(P===me)SFX.jump();}}
+    else{P.vy=JUMPV*(mud?.9:1);P.jbuf=0;P.coyote=0;if(P===me)SFX.jump();}}
   if(!K.j&&P.vy<-120)P.vy=-120;
   if(I.ap)attack();
   for(const k of ['atk','atkCd','bowT','castT'])if(P[k]>0)P[k]-=dt;
