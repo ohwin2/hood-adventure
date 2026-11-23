@@ -375,10 +375,16 @@ THEMES.ice.tip='🧊 얼음 위에서는 미끄러져요';THEMES.factory.tip='�
 const THEME_ORDER=['grass','ice','factory','swamp','poison','lava'];let themeBlk=-1;
 let theme='grass';
 const TH=()=>THEMES[theme]||THEMES.grass;
+// shuffle bag: every theme appears once before any repeats; a refill never starts with the current theme
+let themeBag=[];
+function nextTheme(){
+  if(!themeBag.length){themeBag=shuffle(THEME_ORDER.slice());if(themeBag[0]===theme)themeBag.push(themeBag.shift());}
+  theme=themeBag.shift();}
 function pickTheme(full){
-  if(typeof gmode!=='undefined'&&gmode==='surv'){const o=THEME_ORDER.filter(t=>t!==theme);theme=o[rnd(0,o.length-1)];return;}
-  const blk=Math.floor((stage-1)/3);if(blk===0){theme='grass';themeBlk=0;return;}
-  if(full||blk!==themeBlk){const o=THEME_ORDER.filter(t=>t!==theme);theme=o[rnd(0,o.length-1)];themeBlk=blk;}}
+  if(typeof gmode!=='undefined'&&gmode==='surv'){nextTheme();return;}
+  const blk=Math.floor((stage-1)/3);
+  if(blk===0){if(full||themeBlk!==0){theme='grass';themeBag=shuffle(THEME_ORDER.filter(t=>t!=='grass'));}themeBlk=0;return;}
+  if(full||blk!==themeBlk){nextTheme();themeBlk=blk;}}
 function themeTile(){const p=TH().plat;let r=Math.random();for(const [c,w] of p){r-=w;if(r<=0)return c==='belt'?(Math.random()<.5?'R':'L'):c;}return '-';}
 function genMap(){
   const g=[];for(let y=0;y<LH;y++)g.push(new Array(LW).fill('.'));
