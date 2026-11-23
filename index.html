@@ -310,10 +310,10 @@ const PCOLS=['#7aa8ff','#ff7a7a','#7ae08a','#ffd060'];
 let grid,ents,P,camX,camY,state,coins,totalCoins,hasKey,timer,parts,shake,playTime,arrows,fireballs,popups,waves,seeds,booms,bombs,bones,rings,
   door,blocks,blockCands,blockTimer,reachList,doorMsgT,stage=1,banner=0;
 const MAXLV=10;
-const enemyCount=s=>8+(s-1)*3;
+const enemyCount=s=>8+3*Math.min(s-1,9)+Math.floor(1.5*Math.max(0,s-10));
 const regenTime=s=>Math.max(3,8-.4*(s-1));
 let RSP=null,regenT=0;
-const stageHp=s=>1+.4*(s-1),stageSpd=s=>Math.min(1.8,1+.08*(s-1));
+const stageHp=s=>1+.4*(Math.min(s,10)-1)+.15*Math.max(0,s-10),stageSpd=s=>Math.min(1.8,1+.08*(s-1));
 const BLOCK_LIFE=20,MAX_BLOCKS=4;
 function isSolidChar(c){return c==='X'||c==='S'||c==='Q'||c==='B'||c==='I'||c==='R'||c==='L'||c==='M'||c==='P'||c==='V';}
 const BELT=55;
