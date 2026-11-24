@@ -306,6 +306,7 @@ function setWeapon(w,lv=1){P.weapon=w;P.lv=w?lv:0;if(P===me)updAtkBtn();}
 // ---------- world ----------
 let players=[],me=null,roster=[],spawnPt=[3,31],fxq=[];
 let gmode='coop',winner=null,survT=0,lastHit=null;const SURV_STEP=45;
+let botLv=1,botUp=false;const COOP_BOT_LV=4,BOT_MAX=10;
 const PCOLS=['#7aa8ff','#ff7a7a','#7ae08a','#ffd060'];
 let grid,ents,P,camX,camY,state,coins,totalCoins,hasKey,timer,parts,shake,playTime,arrows,fireballs,popups,waves,seeds,booms,bombs,bones,rings,
   door,blocks,blockCands,blockTimer,reachList,doorMsgT,stage=1,banner=0;
@@ -475,6 +476,7 @@ function reset(full=true){
   const prev={};for(const pl of players)prev[pl.id]=pl;
   players=roster.map((r,i)=>{const o=prev[r.id],keep=!full&&o;
     const pl=newPlayer(r,i);if(keep){pl.weapon=o.weapon;pl.lv=o.lv;pl.hp=o.dead?2:Math.min(3,o.hp+1);pl.inv=1.5;}return pl;});
+  for(const pl of players){const r=roster.find(x=>x.id===pl.id);if(r&&r.bot){pl.bot=true;pl.blv=gmode==='surv'?botLv:COOP_BOT_LV;pl.ai={};}}
   me=players.find(p=>p.id===NET.myId)||players[0];P=me;updAtkBtn();
   const used=new Set(),mark=(x,y)=>{for(let a=-1;a<=1;a++)used.add((x+a)+','+y);};
   const far=([x,y])=>Math.abs(x-sx)+Math.abs(y-sy)>14;
@@ -521,7 +523,7 @@ function reset(full=true){
     for(const e of ents)if(e.enemy&&players.some(pl=>Math.abs(pl.x-e.x)<5*T&&Math.abs(pl.y-e.y)<3*T))e.gone=true;
     ents=ents.filter(e=>!e.gone);updAtkBtn();}
   camX=Math.max(0,P.x-100);camY=LH*T-VH;state=full&&NET.mode==='solo'?'title':'play';banner=full&&NET.mode==='solo'?0:2.8;gridFull=true;
-  spawnBlock(true);spawnBlock(true);
+  spawnBlock(true);spawnBlock(true);navBuild();navT=2;
 }
 function newPlayer(r,i){const sx=spawnPt[0]+(i%4),sy=spawnPt[1];
   return {id:r.id,name:r.name,col:r.col,x:sx*T+2,y:(sy+1)*T-19,w:12,h:19,vx:0,vy:0,face:1,ground:false,coyote:0,jbuf:0,hp:3,inv:0,anim:0,drop:0,
@@ -580,7 +582,7 @@ function hurt(from){
   if(P.hp<=0){P.dead=true;burst(P.x+6,P.y+8,'#ffffff',16,90);
     const kl=lastHit&&players.find(p=>p.id===lastHit);
     if(kl){kl.kills=(kl.kills||0)+1;popup(kl.name+' ▶ '+P.name+' 처치!',P.x+6,P.y-6,PCOLS[kl.col]);}else popup(P.name+' 쓰러짐!',P.x+6,P.y-6,'#ff8090');
-    if(!alive().length){state='over';if(gmode==='surv')winner=null;}}}
+    if(gmode==='surv'?!alive().length:!alive().some(p=>!p.bot)){state='over';if(gmode==='surv')winner=null;}}}
 function pvpHit(oid,hb,fx){if(gmode!=='surv'||state!=='play')return false;let h=false;const sv=P;
   for(const pl of players){if(pl.id===oid||pl.dead||pl.inv>0||!overlap(pl,hb))continue;P=pl;lastHit=oid;hurt(fx);lastHit=null;h=true;}
   P=sv;return h;}
@@ -801,19 +803,140 @@ function updPlayer(pl,dt){
   if(P.atkT>0)P.atkT-=dt;
   P.anim+=dt*(Math.abs(P.vx)>5?1:0);
 }
+// ================= bots (host only: fill an empty room) =================
+let NAV=null,navT=0;
+const nk=(x,y)=>x+y*LW;
+function navBuild(){
+  const g=grid,nodes=new Map(),st=(x,y)=>isStand(g,x,y);
+  for(let y=1;y<LH-1;y++)for(let x=1;x<LW-1;x++){if(!st(x,y))continue;const ed=[];
+    for(const d of [-1,1]){const nx=x+d;
+      if(st(nx,y))ed.push({x:nx,y,t:'w'});
+      else if(!gSolid(g,nx,y)&&!gSolid(g,nx,y-1)){let yy=y+1;while(yy<LH-1&&!st(nx,yy)&&!gSolid(g,nx,yy))yy++;if(st(nx,yy))ed.push({x:nx,y:yy,t:'f'});}
+      for(let dx=2;dx<=4;dx++){let ok=true;for(let i=1;i<=dx;i++){const cx=x+d*i;if(gSolid(g,cx,y)||gSolid(g,cx,y-1)||gSolid(g,cx,y-2)){ok=false;break;}}if(!ok)break;
+        const tx=x+d*dx;for(let dy=0;dy<=2;dy++)if(st(tx,y+dy)){ed.push({x:tx,y:y+dy,t:'j'});break;}}}
+    const maxDy=g[y+1][x]==='M'?2:3;
+    for(let dy=1;dy<=maxDy;dy++){let clear=true;for(let k=1;k<=dy+1;k++)if(gSolid(g,x,y-k)){clear=false;break;}if(!clear)break;
+      const m=dy===3?2:3;for(let dx=-m;dx<=m;dx++){const tx=x+dx,ty=y-dy;if(!st(tx,ty))continue;let ok=true;const s=Math.sign(dx);
+        for(let i=s;dx&&i!==dx;i+=s)if(gSolid(g,x+i,ty)||gSolid(g,x+i,ty-1)){ok=false;break;}if(ok)ed.push({x:tx,y:ty,t:'j'});}}
+    if(g[y+1][x]==='-'){let yy=y+2;while(yy<LH-1&&!st(x,yy)&&!gSolid(g,x,yy))yy++;if(st(x,yy))ed.push({x,y:yy,t:'d'});}
+    const fl=g[y+1][x];nodes.set(nk(x,y),{x,y,ed,bad:fl==='V'?3:fl==='P'?1:0});}
+  NAV=nodes;}
+function navNode(pl){if(!NAV)return null;const fy=Math.floor((pl.y+pl.h-1)/T);
+  for(const x of [Math.floor((pl.x+pl.w/2)/T),Math.floor(pl.x/T),Math.floor((pl.x+pl.w-1)/T)])
+    for(let y=fy;y<fy+6&&y<LH-1;y++){const n=NAV.get(nk(x,y));if(n)return n;if(solidAt(x,y+1))break;}
+  return null;}
+// BFS over the whole reachable graph, then walk back from the visited node closest to the target
+function navPath(from,tx,ty){
+  const prev=new Map([[nk(from.x,from.y),null]]),q=[from];let qi=0,best=from,bd=1e9;
+  while(qi<q.length){const c=q[qi++];const d=Math.abs(c.x-tx)+Math.abs(c.y-ty)*1.5+(c.y<ty?1.5:0)+c.bad*2;if(d<bd){bd=d;best=c;}
+    for(const e of c.ed){const k=nk(e.x,e.y);if(prev.has(k))continue;const n=NAV.get(k);if(!n||n.bad>=3)continue;prev.set(k,{n:c,t:e.t});q.push(n);}}
+  const path=[];let k=nk(best.x,best.y);while(prev.get(k)){const p=prev.get(k);path.unshift({n:NAV.get(k),t:p.t});k=nk(p.n.x,p.n.y);}
+  return path;}
+const ctr=o=>({x:o.x+(o.w||0)/2,y:o.y+(o.h||0)/2});
+function botRange(pl){const w=pl.weapon,l=pl.lv||1;
+  return w==='sword'?{r:(l>=3?90:26+Math.min(18,(l-1)*2)),v:l>=6?20:14}:w==='bow'?{r:200,v:16}:w==='wand'?{r:120,v:24}:w==='boomerang'?{r:85+l*10,v:l>=4?30:16}:w==='bomb'?{r:80,v:30}:{r:0,v:0};}
+function losClear(ax,ay,bx){const s=Math.sign(bx-ax)||1;for(let x=ax;s*(bx-x)>0;x+=s*8)if(solidAt(Math.floor(x/T),Math.floor(ay/T)))return false;return true;}
+function botCanHit(pl,f){const R=botRange(pl),a=ctr(pl),b=ctr(f),dx=b.x-a.x,dy=b.y-a.y;
+  if(Math.abs(dx)>R.r||Math.abs(dy)>R.v+f.h/2)return false;
+  if(pl.weapon!=='bomb'&&!losClear(a.x,a.y,b.x))return false;return true;}
+function nearestIt(pl,pred,maxd){let b=null,bd=maxd*maxd;const c=ctr(pl);for(const e of ents){if(e.enemy||e.gone||!pred(e))continue;const o=ctr(e),d=(o.x-c.x)**2+(o.y-c.y)**2;if(d<bd){bd=d;b=e;}}return b;}
+function nearestQ(pl,maxd){let b=null,bd=maxd*maxd;const c=ctr(pl);for(const q of blocks){if(grid[q.ty][q.tx]!=='Q'||q.life<2)continue;const d=(q.tx*T+8-c.x)**2+(q.ty*T+8-c.y)**2;if(d<bd){bd=d;b=q;}}return b;}
+function botDecide(pl,A,lv){
+  const surv=gmode==='surv',c=ctr(pl);
+  A.idle=Math.random()<Math.max(0,.16-.018*lv)?.25+Math.random()*.3:0;      // weak bots hesitate
+  // target to fight
+  let foe=null,fd=(surv?140+lv*16:150)**2;
+  for(const e of ents){if(!e.enemy||e.dead||e.gone||e.faded)continue;const o=ctr(e),d=(o.x-c.x)**2+(o.y-c.y)**2;if(d<fd){fd=d;foe=e;}}
+  if(surv&&pl.weapon){const agg=.45+lv*.12;for(const p of players){if(p===pl||p.dead)continue;const o=ctr(p),d=((o.x-c.x)**2+(o.y-c.y)**2)/agg;if(d<fd*1.6||!foe){if(!foe||d<fd){fd=d;foe=p;}}}}
+  A.foe=foe;
+  // where to go
+  const wItem=nearestIt(pl,e=>e.t==='weapon'&&(!pl.weapon||(lv>=3&&e.wp===pl.weapon&&pl.lv<MAXLV)),pl.weapon?140:320);
+  const heal=pl.hp<3?nearestIt(pl,e=>e.t==='potion',pl.hp<=1?300:120):null;
+  const buff=nearestIt(pl,e=>e.t==='buff',lv>=3?160:80);
+  const keyIt=!surv&&nearestIt(pl,e=>e.t==='key',600);
+  const qb=(!pl.weapon||(lv>=5&&pl.lv<4))?nearestQ(pl,pl.weapon?150:420):null;
+  let goal=null;A.block=null;
+  if(!surv&&hasKey&&door.active&&door.appear<=0)goal={x:door.x+8,y:door.y+18};
+  else if(keyIt)goal=ctr(keyIt);
+  else if(wItem)goal=ctr(wItem);
+  else if(heal&&(pl.hp<=1||lv>=4))goal=ctr(heal);
+  else if(qb){goal={x:qb.tx*T+8,y:(qb.ty+3)*T+8};A.block=qb;}
+  else if(foe&&pl.weapon){const f=ctr(foe),side=c.x<f.x?-1:1,R=botRange(pl);
+    goal={x:f.x+side*(pl.weapon==='sword'&&pl.lv<3?14:Math.min(R.r*.55,80)),y:foe.y+foe.h-6};}
+  else if(buff)goal=ctr(buff);
+  else if(!surv){const hum=players.filter(p=>!p.bot&&!p.dead);let lead=null,ld=1e18;for(const p of hum){const d=(p.x-pl.x)**2+(p.y-pl.y)**2;if(d<ld){ld=d;lead=p;}}
+    const keyE=ents.find(e=>e.enemy&&e.hasKey&&!e.dead&&!e.gone);
+    if(lead&&ld>(10*T)**2)goal={x:lead.x+6,y:lead.y+12};
+    else if(keyE&&pl.weapon&&lv>=3)goal=ctr(keyE);
+    else if(lead)goal={x:lead.x+6-lead.face*26,y:lead.y+12};}
+  if(!goal){if(!A.wander||A.wt<=0||Math.hypot(A.wander.x-c.x,A.wander.y-c.y)<20){const r=reachList[rnd(0,reachList.length-1)];A.wander={x:r[0]*T+8,y:r[1]*T+8};A.wt=7;}goal=A.wander;}
+  const gt=[Math.floor(goal.x/T),Math.floor(goal.y/T)];
+  if(A.pt<=0||!A.gt||Math.abs(A.gt[0]-gt[0])+Math.abs(A.gt[1]-gt[1])>1){const cur=navNode(pl);if(cur&&NAV){A.path=navPath(cur,gt[0],gt[1]);A.gt=gt;A.pt=.5;}}
+  A.goal=goal;
+  // attack?
+  A.fire=false;A.faceTo=0;
+  if(foe&&pl.weapon&&pl.atkCd<=0){const can=botCanHit(pl,foe);
+    if((can&&Math.random()<.32+.068*lv)||(!can&&Math.random()<Math.max(0,.06-.006*lv))){A.fire=true;A.faceTo=Math.sign(ctr(foe).x-c.x)||1;if(pl.weapon!=='sword'||pl.lv>=3)A.hold=.2+Math.random()*.2;}}
+  // dodge incoming projectiles
+  if(pl.ground&&Math.random()<.08+.085*lv){const th=[...bones,...seeds];if(surv){for(const a of arrows)if(a.owner!==pl.id&&!a.stuck)th.push(a);for(const f of fireballs)if(f.owner!==pl.id)th.push(f);}
+    for(const t of th){const dx=c.x-t.x,dy=c.y-t.y;if(Math.abs(dx)<46&&Math.abs(dy)<22&&Math.sign(t.vx||0)===Math.sign(dx)){A.dodge=true;break;}}}
+}
+function botThink(pl,dt){
+  const A=pl.ai||(pl.ai={}),lv=pl.blv||4;
+  A.t=(A.t||0)-dt;A.pt=(A.pt||0)-dt;if(pl.ground&&(A.jh||0)<.4)A.jh=0;A.hold=(A.hold||0)-dt;A.wt=(A.wt||0)-dt;
+  if(A.t<=0){A.t=Math.max(.07,.36-.03*lv)*(.7+Math.random()*.6);botDecide(pl,A,lv);}
+  const K={l:0,r:0,j:0,a:0,d:0};let jp=false,ap=false;
+  if(A.idle>0){A.idle-=dt;pl.inp=K;return;}
+  const cx=pl.x+pl.w/2,cur=navNode(pl);
+  if(A.path&&cur&&pl.ground)while(A.path.length&&A.path[0].n.x===cur.x&&A.path[0].n.y===cur.y)A.path.shift();
+  const step=A.path&&A.path[0];let tx=A.goal?A.goal.x:null;
+  if(step){tx=step.n.x*T+8;
+    if(pl.ground&&cur){const dxT=step.n.x-cur.x,c0=cur.x*T+8;
+      if(step.t==='j'){const lx=step.n.y>=cur.y?c0+Math.sign(dxT)*5:c0;
+        if(Math.abs(cx-lx)<4||(step.n.y>=cur.y&&Math.sign(dxT)*(cx-lx)>0)){jp=true;A.air=step;}else tx=lx;}
+      else if(step.t==='d'){if(Math.abs(cx-c0)<5){K.d=1;jp=true;}else tx=c0;}}}
+  else if(A.goal&&cur&&Math.abs(A.goal.x-cx)<10)tx=null;
+  if(!pl.ground&&A.air){K.j=1;const tgt=A.air.n,feet=pl.y+pl.h;
+    if(feet>(tgt.y+1)*T-1&&tgt.y<Math.floor((feet-1)/T)){const s=Math.sign(tgt.x*T+8-cx),nc=Math.floor((cx+s*8)/T);
+      if(solidAt(nc,Math.floor((feet-2)/T))||solidAt(nc,Math.floor(pl.y/T)))tx=Math.floor(cx/T)*T+8;}}
+  if(pl.ground&&!jp)A.air=null;
+  if(A.block&&cur&&pl.ground&&cur.x===A.block.tx&&cur.y===A.block.ty+3&&grid[A.block.ty][A.block.tx]==='Q'){jp=true;K.j=1;tx=null;}
+  if(A.hold>0&&A.foe)tx=null;
+  if(tx!==null){const d=tx-cx;if(d<-3)K.l=1;else if(d>3)K.r=1;}
+  if(A.faceTo&&pl.face!==A.faceTo){K.l=A.faceTo<0?1:0;K.r=A.faceTo>0?1:0;}
+  if(A.fire){ap=true;A.fire=false;}
+  if(A.dodge){A.dodge=false;if(pl.ground){jp=true;K.j=1;}}
+  // unstick: pushing but not moving
+  const moving=K.l||K.r;
+  if(moving&&Math.abs(pl.x-(A.lx??pl.x))<.3){A.st=(A.st||0)+dt;if(A.st>.5&&pl.ground){jp=true;K.j=1;A.st=0;A.pt=0;}}else A.st=0;
+  A.lx=pl.x;
+  if(jp&&pl.ground)A.jh=.5;if(A.jh>0){A.jh-=dt;K.j=1;}
+  pl.inp=K;if(jp)pl.jp=true;if(ap)pl.ap=true;
+}
+function addBots(){
+  roster=roster.filter(r=>!r.bot);
+  if(roster.length!==1||gmode!=='surv')return;
+  const n=3;
+  for(let i=0;i<n;i++){const c=COLS_FREE()[0];roster.push({id:'bot'+i,name:'봇'+(i+1),col:c,bot:true});}}
+function survEnd(w){
+  winner=w?w.name:null;state='over';SFX.win();if(w)burst(w.x+6,w.y+8,'#fac83c',30,140);
+  if(players.some(p=>p.bot)){if(w&&!w.bot){botLv=Math.min(BOT_MAX,botLv+1);botUp=true;}else botUp=false;}}
 function update(dt){
   timer+=dt;
   if(state==='lobby')return;
   if(state!=='play'){
-    let go=false;for(const pl of players){const I=inputOf(pl);if(I.jp||I.ap)go=true;}
+    let go=false;for(const pl of players){if(pl.bot)continue;const I=inputOf(pl);if(I.jp||I.ap)go=true;}
     if(go){if(state==='title'){state='play';banner=2.2;}else{reset(true);state='play';banner=2.2;}}
     for(const e of ents)if(e.enemy)e.ph+=dt;return;}
   playTime+=dt;if(banner>0)banner-=dt;
+  if(players.some(p=>p.bot)){navT-=dt;if(navT<=0){navT=2;navBuild();}for(const pl of players)if(pl.bot&&!pl.dead)botThink(pl,dt);}
   for(const pl of players)updPlayer(pl,dt);
   if(gmode==='surv'){
     for(const pl of players){if(pl.dead||pl.atk<=0)continue;P=pl;pvpHit(pl.id,swordBox(),pl.x+6);}
     survT+=dt;if(survT>=SURV_STEP){survT-=SURV_STEP;stage++;if(RSP)RSP.cap=enemyCount(stage);popup('몬스터 강화! 위협 Lv'+stage,(alive()[0]||players[0]).x+6,(alive()[0]||players[0]).y-20,'#ff8090');SFX.door();}
-    if(players.length>1&&alive().length<=1&&state==='play'){const w=alive()[0];winner=w?w.name:null;state='over';SFX.win();if(w)burst(w.x+6,w.y+8,'#fac83c',30,140);return;}}
+    if(players.length>1&&state==='play'){const al=alive(),hum=players.filter(p=>!p.bot);
+      if(al.length<=1){survEnd(al[0]);return;}
+      if(hum.length&&!hum.some(p=>!p.dead)){survEnd(al.slice().sort((a,b)=>(b.kills||0)-(a.kills||0))[0]);return;}}}
   // ? blocks: spawn at random, expire after a while
   blockTimer-=dt;
   if(blockTimer<=0){blockTimer=rnd(5,8);if(blocks.length<MAX_BLOCKS)spawnBlock(Math.random()<.75);}
@@ -1258,11 +1381,12 @@ function drawHUD(){
   if(door.active){txt('문 '+Math.ceil(door.t)+'초',VW-74,20,door.t<5?'#ff8090':'#fac83c',8,'right');doorArrow();}
   else txt('문 닫힘',VW-74,20,'#9aa0b4',8,'right');}
   if(state==='play'&&banner>0){ctx.globalAlpha=Math.min(1,banner*1.5);const by=VH/2-30;
-    R(0,by-16,VW,40,'rgba(28,24,38,.6)');if(gmode==='surv'){txt('⚔ 서바이벌 · '+TH().name,VW/2,by-2,'#ff8090',16);if(TH().tip)txt(TH().tip,VW/2,by-24,'#ffe0a0',9);txt('다른 플레이어를 공격할 수 있어요 · 최후의 1인이 승리!',VW/2,by+16,'#ffffff',9);ctx.globalAlpha=1;}else{txt('STAGE '+stage+' · '+TH().name,VW/2,by-2,'#fac83c',16);if(TH().tip&&!(stage%3===0&&ents.some(e=>e.boss)))txt(TH().tip,VW/2,by-24,'#ffe0a0',9);if(stage%3===0){const bs=ents.find(e=>e.boss);if(bs)txt('⚠ 중간 보스 '+BOSSNAME[effKey(bs)]+' 출현! (열쇠 보유)',VW/2,by-24,'#ff8090',9);}
+    R(0,by-16,VW,40,'rgba(28,24,38,.6)');if(gmode==='surv'){txt('⚔ 서바이벌 · '+TH().name,VW/2,by-2,'#ff8090',16);if(TH().tip)txt(TH().tip,VW/2,by-24,'#ffe0a0',9);txt(players.some(p=>p.bot)?'🤖 봇 Lv'+botLv+'과 대결 · 최후의 1인이 승리! (이기면 봇이 강해져요)':'다른 플레이어를 공격할 수 있어요 · 최후의 1인이 승리!',VW/2,by+16,'#ffffff',9);ctx.globalAlpha=1;}else{txt('STAGE '+stage+' · '+TH().name,VW/2,by-2,'#fac83c',16);if(TH().tip&&!(stage%3===0&&ents.some(e=>e.boss)))txt(TH().tip,VW/2,by-24,'#ffe0a0',9);if(stage%3===0){const bs=ents.find(e=>e.boss);if(bs)txt('⚠ 중간 보스 '+BOSSNAME[effKey(bs)]+' 출현! (열쇠 보유)',VW/2,by-24,'#ff8090',9);}
     txt(stage>1?'몬스터 최대 '+enemyCount(stage)+'마리 · 체력 ×'+stageHp(stage).toFixed(1)+' · 속도 ×'+stageSpd(stage).toFixed(2):'몬스터 최대 '+enemyCount(stage)+'마리 · 열쇠 몬스터를 찾아 문으로 탈출!',VW/2,by+16,'#ffffff',9);ctx.globalAlpha=1;}}
   if(state==='title'&&NET.mode==='solo')overlay('후드 모험가','열쇠를 숨긴 몬스터를 찾아 쓰러뜨리고, 나타났다 사라지는 문으로 탈출하세요',isTouch?'JUMP 버튼을 눌러 시작':'Space를 눌러 시작');
   if(state==='over'&&gmode==='surv'){const rk=players.slice().sort((a,b)=>(b.kills||0)-(a.kills||0)).map(p=>p.name+' '+(p.kills||0)+'킬').join(' · ');
-    overlay(winner?'🏆 '+winner+' 승리!':'무승부!',rk,isTouch?'JUMP로 새 맵에서 다시 대결':'Space로 새 맵에서 다시 대결');}
+    overlay(winner?'🏆 '+winner+' 승리!':'무승부!',rk,isTouch?'JUMP로 새 맵에서 다시 대결':'Space로 새 맵에서 다시 대결');
+    if(players.some(p=>p.bot))txt(botUp?'🤖 봇 레벨 UP! 다음 대결 봇 Lv'+botLv:'🤖 다음 대결 봇 Lv'+botLv+(botLv>=BOT_MAX?' (최고)':''),VW/2,VH/2+48,botUp?'#7cf0a0':'#cfc8e0',9);}
   else if(state==='over')overlay('GAME OVER','STAGE '+stage+' 도달 · 코인 '+coins+'개',isTouch?'JUMP로 새 맵에서 다시':'Space로 새 맵에서 다시');
   if(NET.mode!=='solo'&&NET.code)txt('방 '+NET.code+' · '+players.length+'명',VW-4,VH-6,'rgba(255,255,255,.6)',7,'right');
   if(state==='clear')overlay('탈출 성공!','코인 '+coins+'개 · '+playTime.toFixed(1)+'초',isTouch?'JUMP로 새 맵 도전':'Space로 새 맵 도전');
@@ -1293,7 +1417,7 @@ function doorArrow(){
 }
 function overlay(a,b,c){ctx.fillStyle='rgba(28,24,38,.55)';ctx.fillRect(0,0,VW,VH);
   const oy=VH/2-26;txt(a,VW/2,oy,'#fac83c',20);
-  if(ctx.measureText&&b.length>26){const i=b.indexOf(',');txt(b.slice(0,i+1),VW/2,oy+24,'#fff',10);txt(b.slice(i+2),VW/2,oy+38,'#fff',10);}else txt(b,VW/2,oy+28,'#fff',10);if(Math.floor(timer*2)%2===0)txt(c,VW/2,oy+58,'#cfe8ff',9);}
+  if(ctx.measureText&&b.length>26&&b.indexOf(',')>=0){const i=b.indexOf(',');txt(b.slice(0,i+1),VW/2,oy+24,'#fff',10);txt(b.slice(i+2),VW/2,oy+38,'#fff',10);}else txt(b,VW/2,oy+28,'#fff',10);if(Math.floor(timer*2)%2===0)txt(c,VW/2,oy+58,'#cfe8ff',9);}
 
 let last=0,netAcc=0;
 function loop(t){const dt=Math.min(.033,(t-last)/1000||0);last=t;MUS.set(musWant());
@@ -1388,6 +1512,7 @@ function hostOnData(conn,raw){
   if(m.t==='in'&&pl){pl.inp=m.k;if(m.jp)pl.jp=true;if(m.ap)pl.ap=true;}
 }
 function hostAddGuest(conn){
+  if(!COLS_FREE().length){const b=roster.find(r=>r.bot);if(b){roster=roster.filter(r=>r!==b);const bp=players.find(p=>p.id===b.id);if(bp){players=players.filter(p=>p!==bp);popup(bp.name+' 퇴장',bp.x+6,bp.y-10,'#9aa0b4');}}}
   const free=COLS_FREE();
   if(!free.length){conn.send(JSON.stringify({t:'full'}));setTimeout(()=>conn.close(),300);return;}
   const r={id:conn.peer,name:'P'+(free[0]+1),col:free[0]};roster.push(r);
@@ -1455,11 +1580,12 @@ function renderLobby(){
   if(lobbyMode==='menu'){
     const warn=EMBEDDED?'<p class="err">⚠ 지금은 앱 안의 미리보기 화면이라 멀티플레이 연결이 막혀 있을 수 있어요. 파일을 크롬·사파리 브라우저로 직접 열어 주세요.</p>':'';
     L.innerHTML='<h2>후드 모험가</h2><p>같은 와이파이의 친구와 최대 4명까지 함께 플레이해요</p>'+warn+err+
-      '<button class="pri" id="bSolo">혼자 하기</button><button id="bHost">방 만들기</button>'+
+      '<button class="pri" id="bSolo">혼자 하기</button><button id="bBots">🤖 봇과 서바이벌 (오프라인)</button><button id="bHost">방 만들기</button>'+
       '<input id="iCode" maxlength="4" placeholder="코드" autocomplete="off"><button id="bJoin">참가하기</button>'+
 '<p style="margin-top:12px">방 만들기·참가하기를 누르면 마이크 권한을 물어봐요. 같은 와이파이에서 기기끼리 직접 연결하는 데만 쓰고, 소리는 꺼진 상태로 녹음하지 않아요.</p>';
     document.getElementById('bSolo').onclick=startSolo;
     document.getElementById('bHost').onclick=startHost;
+    document.getElementById('bBots').onclick=()=>{NET.mode='host';NET.myId='me';NET.code='';roster=[{id:'me',name:'P1',col:0}];lobbyMode='bots';lobbyErr='';renderLobby();};
     document.getElementById('bJoin').onclick=()=>startGuest(document.getElementById('iCode').value);
 
   }else if(lobbyMode==='host'){
@@ -1467,12 +1593,19 @@ function renderLobby(){
     L.innerHTML='<h2>방 만들기</h2>'+(NET.code?'<p>친구에게 이 코드를 알려주세요</p><div class="code">'+NET.code+'</div>':'<p>'+(lobbyMsg||'방을 여는 중…')+'</p>')+(NET.code&&lobbyMsg?'<p>'+lobbyMsg+'</p>':'')+err+
       '<ul>'+list+'</ul><p>'+roster.length+' / 4명</p>'+
       '<button class="pri" id="bStart"'+(NET.code?'':' disabled')+'>🤝 협동 시작</button>'+
-      '<button class="pri" id="bSurv" style="background:#de4060;border-color:#de4060"'+(NET.code&&roster.length>=2?'':' disabled')+'>⚔ 서바이벌 시작</button>'+
-      '<p style="margin:2px 0 8px">협동: 함께 열쇠를 찾아 탈출 · 서바이벌: 서로 공격 가능, 최후의 1인 승리'+(roster.length<2?' (2명부터)':'')+'</p><button id="bBack">나가기</button>';
-    const go=m=>{gmode=m;hideLobby();reset(true);state='play';banner=2.8;MIC.timer=setTimeout(micRelease,8000);};
+      '<button class="pri" id="bSurv" style="background:#de4060;border-color:#de4060"'+(NET.code?'':' disabled')+'>⚔ 서바이벌 시작</button>'+
+      '<p style="margin:2px 0 8px">협동: 함께 열쇠를 찾아 탈출 · 서바이벌: 서로 공격 가능, 최후의 1인 승리'+(roster.length<2?'<br>🤖 혼자 서바이벌을 시작하면 봇 3명과 대결해요 (현재 봇 Lv'+botLv+')':'')+'</p><button id="bBack">나가기</button>';
+    const go=m=>{gmode=m;addBots();hideLobby();reset(true);state='play';banner=2.8;MIC.timer=setTimeout(micRelease,8000);};
     document.getElementById('bStart').onclick=()=>go('coop');
     document.getElementById('bSurv').onclick=()=>go('surv');
     document.getElementById('bBack').onclick=()=>location.reload();
+  }else if(lobbyMode==='bots'){
+    L.innerHTML='<h2>🤖 봇과 서바이벌</h2><p>인터넷 연결 없이 봇 3명과 대결해요</p>'+
+      '<button class="pri" id="bSurv" style="background:#de4060;border-color:#de4060">⚔ 서바이벌 (봇 3명 · Lv'+botLv+')</button>'+
+      '<p style="margin:2px 0 8px">서바이벌에서 이길 때마다 봇 레벨이 올라가요 (최대 Lv'+BOT_MAX+')</p><button id="bBack">뒤로</button>';
+    const go=m=>{gmode=m;addBots();hideLobby();reset(true);state='play';banner=2.8;};
+    document.getElementById('bSurv').onclick=()=>go('surv');
+    document.getElementById('bBack').onclick=()=>{NET.mode='solo';roster=[];lobbyMode='menu';renderLobby();};
   }else if(lobbyMode==='guest'){
     L.innerHTML='<h2>참가하기</h2><p>'+(lobbyMsg||'방 '+NET.code+' 에 연결하는 중…')+'</p>'+err+'<button id="bBack">나가기</button>';
     document.getElementById('bBack').onclick=()=>location.reload();
