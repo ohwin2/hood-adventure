@@ -917,7 +917,7 @@ function addBots(){
   roster=roster.filter(r=>!r.bot);
   if(roster.length!==1||gmode!=='surv')return;
   const n=3;
-  for(let i=0;i<n;i++){const c=COLS_FREE()[0];roster.push({id:'bot'+i,name:'봇'+(i+1),col:c,bot:true});}}
+  for(let i=0;i<n;i++){const c=COLS_FREE()[0];roster.push({id:'bot'+i,name:'P'+(c+1),col:c,bot:true});}}
 function survEnd(w){
   winner=w?w.name:null;state='over';SFX.win();if(w)burst(w.x+6,w.y+8,'#fac83c',30,140);
   if(players.some(p=>p.bot)){if(w&&!w.bot){botLv=Math.min(BOT_MAX,botLv+1);botUp=true;}else botUp=false;}}
@@ -1381,12 +1381,11 @@ function drawHUD(){
   if(door.active){txt('문 '+Math.ceil(door.t)+'초',VW-74,20,door.t<5?'#ff8090':'#fac83c',8,'right');doorArrow();}
   else txt('문 닫힘',VW-74,20,'#9aa0b4',8,'right');}
   if(state==='play'&&banner>0){ctx.globalAlpha=Math.min(1,banner*1.5);const by=VH/2-30;
-    R(0,by-16,VW,40,'rgba(28,24,38,.6)');if(gmode==='surv'){txt('⚔ 서바이벌 · '+TH().name,VW/2,by-2,'#ff8090',16);if(TH().tip)txt(TH().tip,VW/2,by-24,'#ffe0a0',9);txt(players.some(p=>p.bot)?'🤖 봇 Lv'+botLv+'과 대결 · 최후의 1인이 승리! (이기면 봇이 강해져요)':'다른 플레이어를 공격할 수 있어요 · 최후의 1인이 승리!',VW/2,by+16,'#ffffff',9);ctx.globalAlpha=1;}else{txt('STAGE '+stage+' · '+TH().name,VW/2,by-2,'#fac83c',16);if(TH().tip&&!(stage%3===0&&ents.some(e=>e.boss)))txt(TH().tip,VW/2,by-24,'#ffe0a0',9);if(stage%3===0){const bs=ents.find(e=>e.boss);if(bs)txt('⚠ 중간 보스 '+BOSSNAME[effKey(bs)]+' 출현! (열쇠 보유)',VW/2,by-24,'#ff8090',9);}
+    R(0,by-16,VW,40,'rgba(28,24,38,.6)');if(gmode==='surv'){txt('⚔ 서바이벌 · '+TH().name,VW/2,by-2,'#ff8090',16);if(TH().tip)txt(TH().tip,VW/2,by-24,'#ffe0a0',9);txt('다른 플레이어를 공격할 수 있어요 · 최후의 1인이 승리!',VW/2,by+16,'#ffffff',9);ctx.globalAlpha=1;}else{txt('STAGE '+stage+' · '+TH().name,VW/2,by-2,'#fac83c',16);if(TH().tip&&!(stage%3===0&&ents.some(e=>e.boss)))txt(TH().tip,VW/2,by-24,'#ffe0a0',9);if(stage%3===0){const bs=ents.find(e=>e.boss);if(bs)txt('⚠ 중간 보스 '+BOSSNAME[effKey(bs)]+' 출현! (열쇠 보유)',VW/2,by-24,'#ff8090',9);}
     txt(stage>1?'몬스터 최대 '+enemyCount(stage)+'마리 · 체력 ×'+stageHp(stage).toFixed(1)+' · 속도 ×'+stageSpd(stage).toFixed(2):'몬스터 최대 '+enemyCount(stage)+'마리 · 열쇠 몬스터를 찾아 문으로 탈출!',VW/2,by+16,'#ffffff',9);ctx.globalAlpha=1;}}
   if(state==='title'&&NET.mode==='solo')overlay('후드 모험가','열쇠를 숨긴 몬스터를 찾아 쓰러뜨리고, 나타났다 사라지는 문으로 탈출하세요',isTouch?'JUMP 버튼을 눌러 시작':'Space를 눌러 시작');
   if(state==='over'&&gmode==='surv'){const rk=players.slice().sort((a,b)=>(b.kills||0)-(a.kills||0)).map(p=>p.name+' '+(p.kills||0)+'킬').join(' · ');
-    overlay(winner?'🏆 '+winner+' 승리!':'무승부!',rk,isTouch?'JUMP로 새 맵에서 다시 대결':'Space로 새 맵에서 다시 대결');
-    if(players.some(p=>p.bot))txt(botUp?'🤖 봇 레벨 UP! 다음 대결 봇 Lv'+botLv:'🤖 다음 대결 봇 Lv'+botLv+(botLv>=BOT_MAX?' (최고)':''),VW/2,VH/2+48,botUp?'#7cf0a0':'#cfc8e0',9);}
+    overlay(winner?'🏆 '+winner+' 승리!':'무승부!',rk,isTouch?'JUMP로 새 맵에서 다시 대결':'Space로 새 맵에서 다시 대결');}
   else if(state==='over')overlay('GAME OVER','STAGE '+stage+' 도달 · 코인 '+coins+'개',isTouch?'JUMP로 새 맵에서 다시':'Space로 새 맵에서 다시');
   if(NET.mode!=='solo'&&NET.code)txt('방 '+NET.code+' · '+players.length+'명',VW-4,VH-6,'rgba(255,255,255,.6)',7,'right');
   if(state==='clear')overlay('탈출 성공!','코인 '+coins+'개 · '+playTime.toFixed(1)+'초',isTouch?'JUMP로 새 맵 도전':'Space로 새 맵 도전');
@@ -1512,7 +1511,7 @@ function hostOnData(conn,raw){
   if(m.t==='in'&&pl){pl.inp=m.k;if(m.jp)pl.jp=true;if(m.ap)pl.ap=true;}
 }
 function hostAddGuest(conn){
-  if(!COLS_FREE().length){const b=roster.find(r=>r.bot);if(b){roster=roster.filter(r=>r!==b);const bp=players.find(p=>p.id===b.id);if(bp){players=players.filter(p=>p!==bp);popup(bp.name+' 퇴장',bp.x+6,bp.y-10,'#9aa0b4');}}}
+  if(!COLS_FREE().length){const b=roster.find(r=>r.bot);if(b){roster=roster.filter(r=>r!==b);const bp=players.find(p=>p.id===b.id);if(bp){players=players.filter(p=>p!==bp);popup(bp.name+' 나감',bp.x+6,bp.y-10,'#9aa0b4');}}}
   const free=COLS_FREE();
   if(!free.length){conn.send(JSON.stringify({t:'full'}));setTimeout(()=>conn.close(),300);return;}
   const r={id:conn.peer,name:'P'+(free[0]+1),col:free[0]};roster.push(r);
@@ -1580,7 +1579,7 @@ function renderLobby(){
   if(lobbyMode==='menu'){
     const warn=EMBEDDED?'<p class="err">⚠ 지금은 앱 안의 미리보기 화면이라 멀티플레이 연결이 막혀 있을 수 있어요. 파일을 크롬·사파리 브라우저로 직접 열어 주세요.</p>':'';
     L.innerHTML='<h2>후드 모험가</h2><p>같은 와이파이의 친구와 최대 4명까지 함께 플레이해요</p>'+warn+err+
-      '<button class="pri" id="bSolo">혼자 하기</button><button id="bBots">🤖 봇과 서바이벌 (오프라인)</button><button id="bHost">방 만들기</button>'+
+      '<button class="pri" id="bSolo">혼자 하기</button><button id="bBots">⚔ 오프라인 서바이벌</button><button id="bHost">방 만들기</button>'+
       '<input id="iCode" maxlength="4" placeholder="코드" autocomplete="off"><button id="bJoin">참가하기</button>'+
 '<p style="margin-top:12px">방 만들기·참가하기를 누르면 마이크 권한을 물어봐요. 같은 와이파이에서 기기끼리 직접 연결하는 데만 쓰고, 소리는 꺼진 상태로 녹음하지 않아요.</p>';
     document.getElementById('bSolo').onclick=startSolo;
@@ -1594,15 +1593,15 @@ function renderLobby(){
       '<ul>'+list+'</ul><p>'+roster.length+' / 4명</p>'+
       '<button class="pri" id="bStart"'+(NET.code?'':' disabled')+'>🤝 협동 시작</button>'+
       '<button class="pri" id="bSurv" style="background:#de4060;border-color:#de4060"'+(NET.code?'':' disabled')+'>⚔ 서바이벌 시작</button>'+
-      '<p style="margin:2px 0 8px">협동: 함께 열쇠를 찾아 탈출 · 서바이벌: 서로 공격 가능, 최후의 1인 승리'+(roster.length<2?'<br>🤖 혼자 서바이벌을 시작하면 봇 3명과 대결해요 (현재 봇 Lv'+botLv+')':'')+'</p><button id="bBack">나가기</button>';
+      '<p style="margin:2px 0 8px">협동: 함께 열쇠를 찾아 탈출 · 서바이벌: 서로 공격 가능, 최후의 1인 승리</p><button id="bBack">나가기</button>';
     const go=m=>{gmode=m;addBots();hideLobby();reset(true);state='play';banner=2.8;MIC.timer=setTimeout(micRelease,8000);};
     document.getElementById('bStart').onclick=()=>go('coop');
     document.getElementById('bSurv').onclick=()=>go('surv');
     document.getElementById('bBack').onclick=()=>location.reload();
   }else if(lobbyMode==='bots'){
-    L.innerHTML='<h2>🤖 봇과 서바이벌</h2><p>인터넷 연결 없이 봇 3명과 대결해요</p>'+
-      '<button class="pri" id="bSurv" style="background:#de4060;border-color:#de4060">⚔ 서바이벌 (봇 3명 · Lv'+botLv+')</button>'+
-      '<p style="margin:2px 0 8px">서바이벌에서 이길 때마다 봇 레벨이 올라가요 (최대 Lv'+BOT_MAX+')</p><button id="bBack">뒤로</button>';
+    L.innerHTML='<h2>⚔ 오프라인 서바이벌</h2><p>인터넷 연결 없이 다른 플레이어 3명과 대결해요</p>'+
+      '<button class="pri" id="bSurv" style="background:#de4060;border-color:#de4060">⚔ 서바이벌 시작</button>'+
+      '<p style="margin:2px 0 8px">서로 공격 가능, 최후의 1인 승리</p><button id="bBack">뒤로</button>';
     const go=m=>{gmode=m;addBots();hideLobby();reset(true);state='play';banner=2.8;};
     document.getElementById('bSurv').onclick=()=>go('surv');
     document.getElementById('bBack').onclick=()=>{NET.mode='solo';roster=[];lobbyMode='menu';renderLobby();};
